@@ -11,6 +11,9 @@ on:
         required: true
         default: 'v16.11.0-pgvector-0.8.1'
 
+permissions:
+  contents: write
+
 env:
   POSTGRES_VERSION: '16.11'
   PGVECTOR_VERSION: '0.8.1'
