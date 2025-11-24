@@ -67,7 +67,18 @@ jobs:
       - name: Set up cross-compilation (Linux ARM64)
         if: matrix.platform == 'linux-arm64'
         run: |
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          sudo dpkg --add-architecture arm64
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu \
+            libreadline-dev:arm64 \
+            zlib1g-dev:arm64 \
+            libssl-dev:arm64 \
+            libxml2-dev:arm64 \
+            libxslt1-dev:arm64 \
+            libicu-dev:arm64
+
           echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
           echo "CXX=aarch64-linux-gnu-g++" >> $GITHUB_ENV
           echo "HOST_FLAG=--host=aarch64-linux-gnu" >> $GITHUB_ENV
@@ -76,6 +87,12 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install readline zlib icu4c pkg-config
+
+          # Set PKG_CONFIG_PATH for Homebrew libraries
+          ICU_PATH=$(brew --prefix icu4c)
+          echo "PKG_CONFIG_PATH=${ICU_PATH}/lib/pkgconfig:${PKG_CONFIG_PATH}" >> $GITHUB_ENV
+          echo "LDFLAGS=-L${ICU_PATH}/lib ${LDFLAGS}" >> $GITHUB_ENV
+          echo "CPPFLAGS=-I${ICU_PATH}/include ${CPPFLAGS}" >> $GITHUB_ENV
 
       # - name: Set up build environment (Windows)
       #   if: runner.os == 'Windows'
