@@ -13,7 +13,10 @@ These binaries enable deespec to provide an embedded PostgreSQL database without
 
 ## Supported Platforms
 
-- darwin-arm64 (macOS Apple Silicon - M1/M2/M3)
+- **linux-amd64** (Linux x86_64)
+- **linux-arm64** (Linux ARM64/aarch64)
+- **darwin-amd64** (macOS Intel)
+- **darwin-arm64** (macOS Apple Silicon - M1/M2/M3)
 
 ## Usage
 
@@ -22,11 +25,19 @@ These binaries are automatically downloaded during the deespec build process via
 ### Manual Download
 
 ```bash
-# Download for macOS Apple Silicon
-curl -L -o postgres-darwin-arm64.tar.gz \
-  https://github.com/YoshitsuguKoike/postgres-binaries/releases/download/v16.11.0-pgvector-0.8.1/postgres-darwin-arm64.tar.gz
+# Download for your platform (replace <PLATFORM> with your platform)
+# Platforms: linux-amd64, linux-arm64, darwin-amd64, darwin-arm64
+curl -L -o postgres-<PLATFORM>.tar.gz \
+  https://github.com/YoshitsuguKoike/postgres-binaries/releases/download/v16.11.0-pgvector-0.8.1/postgres-<PLATFORM>.tar.gz
 
 # Extract
+tar -xzf postgres-<PLATFORM>.tar.gz
+```
+
+Example for macOS Apple Silicon:
+```bash
+curl -L -o postgres-darwin-arm64.tar.gz \
+  https://github.com/YoshitsuguKoike/postgres-binaries/releases/download/v16.11.0-pgvector-0.8.1/postgres-darwin-arm64.tar.gz
 tar -xzf postgres-darwin-arm64.tar.gz
 ```
 
@@ -67,9 +78,17 @@ THE COPYRIGHT HOLDER SPECIFICALLY DISCLAIMS ANY WARRANTIES, INCLUDING, BUT NOT L
 
 ## Build Information
 
-Binaries are built from official Homebrew packages:
-- `postgresql@16` (16.11)
-- `pgvector` (0.8.1)
+Binaries are automatically built from source using GitHub Actions:
+- PostgreSQL from official source: https://ftp.postgresql.org/pub/source/
+- pgvector from official repository: https://github.com/pgvector/pgvector
+
+### Build Process
+
+All binaries are built with:
+- OpenSSL support
+- XML/XSLT support
+- ICU (International Components for Unicode) support
+- pgvector 0.8.1 extension pre-installed
 
 ## Security
 
@@ -80,10 +99,19 @@ These binaries are provided as-is for development and production use. Please ens
 
 ## Contributing
 
-To add support for additional platforms, please:
-1. Build PostgreSQL 16.11 with pgvector 0.8.1 for your platform
-2. Create a tar.gz archive with the same structure
-3. Submit a pull request with the release
+### Adding New Platforms
+
+To add support for additional platforms:
+1. Update the `.github/workflows/build-release.yml` file
+2. Add your platform to the build matrix
+3. Test the build process
+4. Submit a pull request
+
+### Updating PostgreSQL or pgvector Version
+
+1. Update `POSTGRES_VERSION` and/or `PGVECTOR_VERSION` in `.github/workflows/build-release.yml`
+2. Create a new tag (e.g., `v16.12.0-pgvector-0.8.1`)
+3. Push the tag to trigger the build workflow
 
 ## Links
 

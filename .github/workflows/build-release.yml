@@ -1,0 +1,193 @@
+name: Build and Release PostgreSQL Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version_tag:
+        description: 'Version tag (e.g., v16.11.0-pgvector-0.8.1)'
+        required: true
+        default: 'v16.11.0-pgvector-0.8.1'
+
+env:
+  POSTGRES_VERSION: '16.11'
+  PGVECTOR_VERSION: '0.8.1'
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux AMD64
+          - os: ubuntu-latest
+            platform: linux-amd64
+            arch: x86_64
+          # Linux ARM64
+          - os: ubuntu-latest
+            platform: linux-arm64
+            arch: aarch64
+          # macOS AMD64 (Intel)
+          - os: macos-13
+            platform: darwin-amd64
+            arch: x86_64
+          # macOS ARM64 (Apple Silicon)
+          - os: macos-latest
+            platform: darwin-arm64
+            arch: arm64
+          # Windows AMD64 (TODO: Implement Windows build)
+          # - os: windows-latest
+          #   platform: windows-amd64
+          #   arch: x86_64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up build environment (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            libreadline-dev \
+            zlib1g-dev \
+            flex \
+            bison \
+            libxml2-dev \
+            libxslt-dev \
+            libssl-dev \
+            libicu-dev \
+            pkg-config
+
+      - name: Set up cross-compilation (Linux ARM64)
+        if: matrix.platform == 'linux-arm64'
+        run: |
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
+          echo "CXX=aarch64-linux-gnu-g++" >> $GITHUB_ENV
+          echo "HOST_FLAG=--host=aarch64-linux-gnu" >> $GITHUB_ENV
+
+      - name: Set up build environment (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install readline zlib icu4c pkg-config
+
+      # - name: Set up build environment (Windows)
+      #   if: runner.os == 'Windows'
+      #   run: |
+      #     choco install -y strawberryperl
+      #     choco install -y winflexbison3
+
+      - name: Download and build PostgreSQL
+        shell: bash
+        run: |
+          mkdir -p build
+          cd build
+
+          # Download PostgreSQL source
+          curl -L -o postgresql-${{ env.POSTGRES_VERSION }}.tar.gz \
+            https://ftp.postgresql.org/pub/source/v${{ env.POSTGRES_VERSION }}/postgresql-${{ env.POSTGRES_VERSION }}.tar.gz
+          tar -xzf postgresql-${{ env.POSTGRES_VERSION }}.tar.gz
+          cd postgresql-${{ env.POSTGRES_VERSION }}
+
+          # Configure and build
+          ./configure \
+            --prefix=$PWD/../../install \
+            --with-openssl \
+            --with-libxml \
+            --with-libxslt \
+            --with-icu \
+            ${{ env.HOST_FLAG || '' }}
+
+          # Build and install
+          make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+          make install
+
+      - name: Download and build pgvector
+        shell: bash
+        run: |
+          cd build
+
+          # Download pgvector source
+          curl -L -o pgvector-${{ env.PGVECTOR_VERSION }}.tar.gz \
+            https://github.com/pgvector/pgvector/archive/refs/tags/v${{ env.PGVECTOR_VERSION }}.tar.gz
+          tar -xzf pgvector-${{ env.PGVECTOR_VERSION }}.tar.gz
+          cd pgvector-${{ env.PGVECTOR_VERSION }}
+
+          # Build and install
+          export PG_CONFIG=$PWD/../../install/bin/pg_config
+          make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+          make install
+
+      - name: Create archive
+        shell: bash
+        run: |
+          cd build/install
+          tar -czf ../../postgres-${{ matrix.platform }}.tar.gz .
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-${{ matrix.platform }}
+          path: postgres-${{ matrix.platform }}.tar.gz
+          retention-days: 1
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          find artifacts -name "*.tar.gz" -exec cp {} release/ \;
+          ls -lh release/
+
+      - name: Get version tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.version_tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: PostgreSQL ${{ env.POSTGRES_VERSION }} + pgvector ${{ env.PGVECTOR_VERSION }}
+          draft: false
+          prerelease: false
+          files: release/*
+          body: |
+            ## PostgreSQL ${{ env.POSTGRES_VERSION }} with pgvector ${{ env.PGVECTOR_VERSION }}
+
+            Pre-compiled PostgreSQL binaries with pgvector extension for all supported platforms.
+
+            ### Platforms
+            - linux-amd64 (Linux x86_64)
+            - linux-arm64 (Linux ARM64)
+            - darwin-amd64 (macOS Intel)
+            - darwin-arm64 (macOS Apple Silicon)
+
+            ### Components
+            - PostgreSQL ${{ env.POSTGRES_VERSION }}
+            - pgvector ${{ env.PGVECTOR_VERSION }}
+
+            ### Usage
+            Download the appropriate archive for your platform and extract to `embed/postgres/` directory in the deespec project.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
