@@ -26,8 +26,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux AMD64 (use ubuntu-20.04 for better compatibility with older distros)
-          - os: ubuntu-20.04
+          # Linux AMD64 (use ubuntu-22.04 for compatibility with Amazon Linux 2023)
+          - os: ubuntu-22.04
             platform: linux-amd64
             arch: x86_64
           # Linux ARM64 (TODO: Fix cross-compilation setup)
