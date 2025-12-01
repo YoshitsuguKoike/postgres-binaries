@@ -1,0 +1,31 @@
+FROM amazonlinux:2023
+
+# Install basic tools required by GitHub Actions
+RUN dnf install -y \
+    git \
+    tar \
+    gzip \
+    wget \
+    which \
+    findutils
+
+# Install build tools
+RUN dnf groupinstall -y "Development Tools"
+
+# Install PostgreSQL build dependencies
+RUN dnf install -y \
+    readline-devel \
+    zlib-devel \
+    flex \
+    bison \
+    libxml2-devel \
+    libxslt-devel \
+    openssl-devel \
+    libicu-devel \
+    pkgconfig
+
+# Set working directory
+WORKDIR /workspace
+
+# Default command
+CMD ["/bin/bash"]

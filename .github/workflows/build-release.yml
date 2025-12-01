@@ -22,7 +22,6 @@ jobs:
   build:
     name: Build ${{ matrix.platform }}
     runs-on: ${{ matrix.os }}
-    container: ${{ matrix.container }}
     strategy:
       fail-fast: false
       matrix:
@@ -32,11 +31,11 @@ jobs:
             platform: linux-amd64-ubuntu
             arch: x86_64
             container: null
-          # Linux AMD64 - Amazon Linux (RHEL-based distros)
+          # Linux AMD64 - Amazon Linux (RHEL-based distros) - built in Docker
           - os: ubuntu-latest
             platform: linux-amd64-amazonlinux
             arch: x86_64
-            container: amazonlinux:2023
+            use_docker: true
           # Linux ARM64 (TODO: Fix cross-compilation setup)
           # - os: ubuntu-latest
           #   platform: linux-arm64
@@ -74,23 +73,10 @@ jobs:
             libicu-dev \
             pkg-config
 
-      - name: Set up build environment (Amazon Linux)
-        if: matrix.platform == 'linux-amd64-amazonlinux'
+      - name: Build Docker image for Amazon Linux
+        if: matrix.use_docker == true
         run: |
-          dnf groupinstall -y "Development Tools"
-          dnf install -y \
-            readline-devel \
-            zlib-devel \
-            flex \
-            bison \
-            libxml2-devel \
-            libxslt-devel \
-            openssl-devel \
-            libicu-devel \
-            pkgconfig \
-            tar \
-            gzip \
-            wget
+          docker build -f Dockerfile.amazonlinux -t amazonlinux-builder:latest .
 
       - name: Set up cross-compilation (Linux ARM64)
         if: matrix.platform == 'linux-arm64'
@@ -129,7 +115,24 @@ jobs:
       #     choco install -y strawberryperl
       #     choco install -y winflexbison3
 
-      - name: Download and build PostgreSQL
+      - name: Download and build PostgreSQL (Amazon Linux in Docker)
+        if: matrix.use_docker == true
+        shell: bash
+        run: |
+          docker run --rm -v $PWD:/workspace -w /workspace amazonlinux-builder:latest bash -c "
+            mkdir -p build install
+            cd build
+            curl -L -o postgresql-${{ env.POSTGRES_VERSION }}.tar.gz \
+              https://ftp.postgresql.org/pub/source/v${{ env.POSTGRES_VERSION }}/postgresql-${{ env.POSTGRES_VERSION }}.tar.gz
+            tar -xzf postgresql-${{ env.POSTGRES_VERSION }}.tar.gz
+            cd postgresql-${{ env.POSTGRES_VERSION }}
+            ./configure --prefix=/workspace/install --with-openssl --with-libxml --with-libxslt --with-icu
+            make -j\$(nproc)
+            make install
+          "
+
+      - name: Download and build PostgreSQL (Native)
+        if: matrix.use_docker != true
         shell: bash
         run: |
           mkdir -p build
@@ -154,7 +157,25 @@ jobs:
           make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
           make install
 
-      - name: Download and build pgvector
+      - name: Download and build pgvector (Amazon Linux in Docker)
+        if: matrix.use_docker == true
+        shell: bash
+        run: |
+          docker run --rm -v $PWD:/workspace -w /workspace amazonlinux-builder:latest bash -c "
+            cd build
+            curl -L -o pgvector-${{ env.PGVECTOR_VERSION }}.tar.gz \
+              https://github.com/pgvector/pgvector/archive/refs/tags/v${{ env.PGVECTOR_VERSION }}.tar.gz
+            tar -xzf pgvector-${{ env.PGVECTOR_VERSION }}.tar.gz
+            cd pgvector-${{ env.PGVECTOR_VERSION }}
+            export PG_CONFIG=/workspace/install/bin/pg_config
+            make -j\$(nproc)
+            make install
+            cd /workspace/install
+            tar -czf /workspace/postgres-${{ matrix.platform }}.tar.gz .
+          "
+
+      - name: Download and build pgvector (Native)
+        if: matrix.use_docker != true
         shell: bash
         run: |
           cd build
@@ -170,7 +191,8 @@ jobs:
           make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
           make install
 
-      - name: Create archive
+      - name: Create archive (Native)
+        if: matrix.use_docker != true
         shell: bash
         run: |
           cd install
