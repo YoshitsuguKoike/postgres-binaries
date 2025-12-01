@@ -26,10 +26,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux AMD64 (use ubuntu-22.04 for compatibility with Amazon Linux 2023)
+          # Linux AMD64 - Ubuntu/Debian (Debian-based distros)
           - os: ubuntu-22.04
-            platform: linux-amd64
+            platform: linux-amd64-ubuntu
             arch: x86_64
+            container: null
+          # Linux AMD64 - Amazon Linux (RHEL-based distros)
+          - os: ubuntu-latest
+            platform: linux-amd64-amazonlinux
+            arch: x86_64
+            container: amazonlinux:2023
           # Linux ARM64 (TODO: Fix cross-compilation setup)
           # - os: ubuntu-latest
           #   platform: linux-arm64
@@ -51,8 +57,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up build environment (Linux)
-        if: runner.os == 'Linux'
+      - name: Set up build environment (Ubuntu/Debian)
+        if: matrix.platform == 'linux-amd64-ubuntu'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -66,6 +72,24 @@ jobs:
             libssl-dev \
             libicu-dev \
             pkg-config
+
+      - name: Set up build environment (Amazon Linux)
+        if: matrix.platform == 'linux-amd64-amazonlinux'
+        run: |
+          dnf groupinstall -y "Development Tools"
+          dnf install -y \
+            readline-devel \
+            zlib-devel \
+            flex \
+            bison \
+            libxml2-devel \
+            libxslt-devel \
+            openssl-devel \
+            libicu-devel \
+            pkgconfig \
+            tar \
+            gzip \
+            wget
 
       - name: Set up cross-compilation (Linux ARM64)
         if: matrix.platform == 'linux-arm64'
